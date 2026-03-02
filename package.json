@@ -1,0 +1,34 @@
+{
+  "name": "moxie-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP Server for Moxie CRM & Project Management Integration (Docker Version)",
+  "main": "moxie-mcp-server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node moxie-mcp-server.js",
+    "docker:build": "docker build -t moxie-mcp-server .",
+    "docker:run": "docker run --rm -it --env-file .env moxie-mcp-server",
+    "docker:compose": "docker-compose up -d"
+  },
+  "keywords": [
+    "mcp",
+    "moxie",
+    "crm",
+    "project-management",
+    "api",
+    "integration",
+    "docker"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "zod": "^3.22.4",
+    "zod-to-json-schema": "^3.22.4",
+    "node-fetch": "^3.3.2",
+    "form-data": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
