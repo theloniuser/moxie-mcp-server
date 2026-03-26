@@ -393,9 +393,9 @@ const TOOLS = [
       required: ['clientName', 'firstName', 'lastName', 'email']
     },
     handler: async (args) => {
-      const { clientName, ...contactData } = args;
-      const clientId = await moxieApi.resolveClientId(clientName);
-      return moxieApi.createContact({ ...contactData, clientId });
+      const { clientName, firstName, lastName, ...rest } = args;
+      // Moxie API uses 'first'/'last'/'clientName' (not firstName/lastName/clientId)
+      return moxieApi.createContact({ clientName, first: firstName, last: lastName, ...rest });
     }
   },
 
@@ -657,6 +657,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         clientName: { type: 'string', description: 'Exact match of client name (required)' },
+        contactEmail: { type: 'string', description: 'Email of an existing contact at this client — used to link the ticket. If omitted, the first available contact email is used.' },
         subject: { type: 'string', description: 'Ticket subject (required)' },
         description: { type: 'string' },
         status: { type: 'string' },
@@ -667,9 +668,22 @@ const TOOLS = [
       required: ['clientName', 'subject']
     },
     handler: async (args) => {
-      const { clientName, ...ticketData } = args;
-      const clientId = await moxieApi.resolveClientId(clientName);
-      return moxieApi.createTicket({ ...ticketData, clientId });
+      const { clientName, contactEmail, ...ticketData } = args;
+      // Moxie API links tickets to clients via userEmail (a contact's email), not clientId
+      let userEmail = contactEmail;
+      if (!userEmail) {
+        // Look up the client's contacts and use the first available email
+        const map = await moxieApi.getClientMap();
+        const clientId = map[clientName];
+        if (!clientId) throw new Error(`Client not found: "${clientName}". Use moxie_list_clients to find the exact name.`);
+        const clients = await moxieApi.listClients();
+        const list = Array.isArray(clients) ? clients : (clients.clients || []);
+        const client = list.find(c => c.id === clientId);
+        const contact = client && client.contacts && client.contacts.find(c => c.email);
+        if (!contact) throw new Error(`No contacts found for client "${clientName}". Add a contact first or pass contactEmail.`);
+        userEmail = contact.email;
+      }
+      return moxieApi.createTicket({ ...ticketData, userEmail });
     }
   },
   {
