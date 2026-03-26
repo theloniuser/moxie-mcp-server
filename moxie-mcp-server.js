@@ -223,7 +223,8 @@ class MoxieServer {
   }
 
   async createTicketComment(data) {
-    return this.makeRequest('/action/tickets/comment', 'POST', data);
+    const { ticketId, ...body } = data;
+    return this.makeRequest(`/action/tickets/${ticketId}/comment`, 'POST', body);
   }
 
   // Opportunity Tools
