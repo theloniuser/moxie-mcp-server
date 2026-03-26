@@ -92,6 +92,47 @@ class MoxieServer {
     return this.makeRequest('/action/clients/create', 'POST', data);
   }
 
+  // Name Resolution Helpers
+  async resolveClientId(clientName) {
+    const clients = await this.searchClients(clientName);
+    const list = Array.isArray(clients) ? clients : (clients.clients || []);
+    const client = list.find(c => c.name === clientName);
+    if (!client) throw new Error(`Client not found: "${clientName}". Use moxie_search_clients to find the exact name.`);
+    return client.id;
+  }
+
+  async resolveProjectId(projectName) {
+    const projects = await this.searchProjects(projectName);
+    const list = Array.isArray(projects) ? projects : (projects.projects || []);
+    const project = list.find(p => p.name === projectName);
+    if (!project) throw new Error(`Project not found: "${projectName}". Use moxie_search_projects to find the exact name.`);
+    return project.id;
+  }
+
+  async resolveVendorId(vendorName) {
+    const vendors = await this.listVendorNames();
+    const list = Array.isArray(vendors) ? vendors : (vendors.vendors || []);
+    const vendor = list.find(v => v.name === vendorName);
+    if (!vendor) throw new Error(`Vendor not found: "${vendorName}". Use moxie_list_vendors to find the exact name.`);
+    return vendor.id;
+  }
+
+  async resolveInvoiceTemplateId(templateName) {
+    const templates = await this.listInvoiceTemplates();
+    const list = Array.isArray(templates) ? templates : (templates.templates || []);
+    const template = list.find(t => t.name === templateName);
+    if (!template) throw new Error(`Invoice template not found: "${templateName}". Use moxie_list_invoice_templates to find the exact name.`);
+    return template.id;
+  }
+
+  async resolveFormId(formName) {
+    const forms = await this.listFormNames();
+    const list = Array.isArray(forms) ? forms : (forms.forms || []);
+    const form = list.find(f => f.name === formName);
+    if (!form) throw new Error(`Form not found: "${formName}". Use moxie_list_forms to find the exact name.`);
+    return form.id;
+  }
+
   // Contact Management Tools
   async searchContacts(query) {
     const endpoint = query ? `/action/contacts/search?query=${encodeURIComponent(query)}` : '/action/contacts/search';
@@ -328,7 +369,11 @@ const TOOLS = [
       },
       required: ['clientName', 'firstName', 'lastName', 'email']
     },
-    handler: async (args) => await moxieApi.createContact(args)
+    handler: async (args) => {
+      const { clientName, ...contactData } = args;
+      const clientId = await moxieApi.resolveClientId(clientName);
+      return moxieApi.createContact({ ...contactData, clientId });
+    }
   },
 
   // Project Management
@@ -384,7 +429,13 @@ const TOOLS = [
       },
       required: ['name', 'clientName']
     },
-    handler: async (args) => await moxieApi.createProject(args)
+    handler: async (args) => {
+      const { clientName, templateName, ...projectData } = args;
+      const clientId = await moxieApi.resolveClientId(clientName);
+      let templateId;
+      if (templateName) templateId = await moxieApi.resolveInvoiceTemplateId(templateName);
+      return moxieApi.createProject({ ...projectData, clientId, ...(templateId && { templateId }) });
+    }
   },
 
   // Task Management
@@ -416,7 +467,12 @@ const TOOLS = [
       },
       required: ['name', 'clientName', 'projectName']
     },
-    handler: async (args) => await moxieApi.createTask(args)
+    handler: async (args) => {
+      const { clientName, projectName, ...taskData } = args;
+      const clientId = await moxieApi.resolveClientId(clientName);
+      const projectId = await moxieApi.resolveProjectId(projectName);
+      return moxieApi.createTask({ ...taskData, clientId, projectId });
+    }
   },
   {
     name: 'moxie_list_task_stages',
@@ -474,7 +530,11 @@ const TOOLS = [
       },
       required: ['clientName']
     },
-    handler: async (args) => await moxieApi.createInvoice(args)
+    handler: async (args) => {
+      const { clientName, ...invoiceData } = args;
+      const clientId = await moxieApi.resolveClientId(clientName);
+      return moxieApi.createInvoice({ ...invoiceData, clientId });
+    }
   },
   {
     name: 'moxie_apply_payment',
@@ -513,7 +573,18 @@ const TOOLS = [
       },
       required: ['date', 'amount', 'currency', 'paid', 'reimbursable']
     },
-    handler: async (args) => await moxieApi.createExpense(args)
+    handler: async (args) => {
+      const { clientName, vendor, ...expenseData } = args;
+      if (clientName) {
+        const clientId = await moxieApi.resolveClientId(clientName);
+        expenseData.clientId = clientId;
+      }
+      if (vendor) {
+        const vendorId = await moxieApi.resolveVendorId(vendor);
+        expenseData.vendorId = vendorId;
+      }
+      return moxieApi.createExpense(expenseData);
+    }
   },
 
   // Time Tracking
@@ -533,7 +604,14 @@ const TOOLS = [
       },
       required: ['hours']
     },
-    handler: async (args) => await moxieApi.createTimeEntry(args)
+    handler: async (args) => {
+      const { projectName, ...timeData } = args;
+      if (projectName) {
+        const projectId = await moxieApi.resolveProjectId(projectName);
+        timeData.projectId = projectId;
+      }
+      return moxieApi.createTimeEntry(timeData);
+    }
   },
 
   // Tickets/Requests
@@ -565,7 +643,11 @@ const TOOLS = [
       },
       required: ['clientName', 'subject']
     },
-    handler: async (args) => await moxieApi.createTicket(args)
+    handler: async (args) => {
+      const { clientName, ...ticketData } = args;
+      const clientId = await moxieApi.resolveClientId(clientName);
+      return moxieApi.createTicket({ ...ticketData, clientId });
+    }
   },
   {
     name: 'moxie_add_ticket_comment',
@@ -600,7 +682,14 @@ const TOOLS = [
       },
       required: ['name']
     },
-    handler: async (args) => await moxieApi.createOpportunity(args)
+    handler: async (args) => {
+      const { clientName, ...opportunityData } = args;
+      if (clientName) {
+        const clientId = await moxieApi.resolveClientId(clientName);
+        opportunityData.clientId = clientId;
+      }
+      return moxieApi.createOpportunity(opportunityData);
+    }
   },
   {
     name: 'moxie_list_pipeline_stages',
@@ -652,7 +741,15 @@ const TOOLS = [
       },
       required: ['formName']
     },
-    handler: async (args) => await moxieApi.createFormSubmission(args)
+    handler: async (args) => {
+      const { formName, clientName, ...formData } = args;
+      const formId = await moxieApi.resolveFormId(formName);
+      if (clientName) {
+        const clientId = await moxieApi.resolveClientId(clientName);
+        formData.clientId = clientId;
+      }
+      return moxieApi.createFormSubmission({ ...formData, formId });
+    }
   },
 
   // Vendor & User Management
@@ -697,7 +794,18 @@ const TOOLS = [
         }
       }
     },
-    handler: async (args) => await moxieApi.createOrUpdateCalendarEvent(args)
+    handler: async (args) => {
+      const { clientName, projectName, ...eventData } = args;
+      if (clientName) {
+        const clientId = await moxieApi.resolveClientId(clientName);
+        eventData.clientId = clientId;
+      }
+      if (projectName) {
+        const projectId = await moxieApi.resolveProjectId(projectName);
+        eventData.projectId = projectId;
+      }
+      return moxieApi.createOrUpdateCalendarEvent(eventData);
+    }
   },
 
   // File Attachments
