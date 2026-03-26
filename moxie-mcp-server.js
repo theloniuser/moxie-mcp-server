@@ -30,20 +30,35 @@ class MoxieServer {
   constructor() {
     this.baseUrl = process.env.MOXIE_BASE_URL;
     this.apiKey = process.env.MOXIE_API_KEY;
-    
+
     if (!this.baseUrl || !this.apiKey) {
       console.error('ERROR: MOXIE_BASE_URL and MOXIE_API_KEY environment variables are required');
       console.error('Get these from Workspace Settings > Connected Apps > Integrations');
       process.exit(1);
     }
-    
+
     // Ensure base URL format is correct
     this.baseUrl = this.baseUrl.replace(/\/$/, '');
     if (!this.baseUrl.includes('/api/public')) {
       this.baseUrl = `${this.baseUrl}/api/public`;
     }
-    
+
+    // Client name → ID cache (loaded lazily on first resolveClientId call)
+    this.clientMapCache = null;
+
     console.error(`Moxie API configured: ${this.baseUrl.replace(this.apiKey, '***')}`);
+  }
+
+  async getClientMap() {
+    if (this.clientMapCache) return this.clientMapCache;
+    const clients = await this.listClients();
+    const list = Array.isArray(clients) ? clients : (clients.clients || []);
+    this.clientMapCache = {};
+    for (const c of list) {
+      if (c.id && c.name) this.clientMapCache[c.name] = c.id;
+    }
+    console.error(`Client map loaded: ${Object.keys(this.clientMapCache).length} clients`);
+    return this.clientMapCache;
   }
 
   async makeRequest(endpoint, method = 'GET', body = null, isMultipart = false) {
@@ -94,10 +109,18 @@ class MoxieServer {
 
   // Name Resolution Helpers
   async resolveClientId(clientName) {
+    // Check full client map first (covers clients that don't appear in search results)
+    const map = await this.getClientMap();
+    if (map[clientName]) return map[clientName];
+
+    // Fall back to search API for partial/fuzzy matches
     const clients = await this.searchClients(clientName);
     const list = Array.isArray(clients) ? clients : (clients.clients || []);
     const client = list.find(c => c.name === clientName);
-    if (!client) throw new Error(`Client not found: "${clientName}". Use moxie_search_clients to find the exact name.`);
+    if (!client) {
+      const available = Object.keys(map).join('\n  ');
+      throw new Error(`Client not found: "${clientName}".\n\nAvailable clients:\n  ${available}`);
+    }
     return client.id;
   }
 
