@@ -223,8 +223,13 @@ class MoxieServer {
   }
 
   async createTicketComment(data) {
-    const { ticketId, ...body } = data;
-    return this.makeRequest(`/action/tickets/${ticketId}/comment`, 'POST', body);
+    const body = {
+      ticketNumber: data.ticketNumber,
+      comment: data.comment,
+      privateComment: data.isPrivate || false,
+      userEmail: data.userEmail
+    };
+    return this.makeRequest('/action/tickets/comments/create', 'POST', body);
   }
 
   // Opportunity Tools
@@ -693,11 +698,12 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        ticketId: { type: 'string', description: 'Ticket ID (required)' },
+        ticketNumber: { type: 'number', description: 'Ticket number (numeric, e.g. 1202) — required' },
         comment: { type: 'string', description: 'Comment text (required)' },
+        userEmail: { type: 'string', description: 'Email of a recognized contact or team member (required)' },
         isPrivate: { type: 'boolean', default: false, description: 'Whether comment is internal only' }
       },
-      required: ['ticketId', 'comment']
+      required: ['ticketNumber', 'comment', 'userEmail']
     },
     handler: async (args) => await moxieApi.createTicketComment(args)
   },
