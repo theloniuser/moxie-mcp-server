@@ -219,7 +219,10 @@ class MoxieServer {
   }
 
   async createTicket(data) {
-    return this.makeRequest('/action/tickets/create', 'POST', data);
+    const { description, ...rest } = data;
+    const body = { ...rest };
+    if (description) body.summary = description;
+    return this.makeRequest('/action/tickets/create', 'POST', body);
   }
 
   async createTicketComment(data) {
