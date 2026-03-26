@@ -219,10 +219,7 @@ class MoxieServer {
   }
 
   async createTicket(data) {
-    const { description, ...rest } = data;
-    const body = { ...rest };
-    if (description) body.summary = description;
-    return this.makeRequest('/action/tickets/create', 'POST', body);
+    return this.makeRequest('/action/tickets/create', 'POST', data);
   }
 
   async createTicketComment(data) {
@@ -677,7 +674,7 @@ const TOOLS = [
       required: ['clientName', 'subject']
     },
     handler: async (args) => {
-      const { clientName, contactEmail, ...ticketData } = args;
+      const { clientName, contactEmail, description, ...ticketData } = args;
       // Moxie API links tickets to clients via userEmail (a contact's email), not clientId
       let userEmail = contactEmail;
       if (!userEmail) {
@@ -692,7 +689,13 @@ const TOOLS = [
         if (!contact) throw new Error(`No contacts found for client "${clientName}". Add a contact first or pass contactEmail.`);
         userEmail = contact.email;
       }
-      return moxieApi.createTicket({ ...ticketData, userEmail });
+      const result = await moxieApi.createTicket({ ...ticketData, userEmail });
+      // Moxie API does not support setting summary on creation — post description as initial comment instead
+      if (description && result.ticket) {
+        const { ticketNumber } = result.ticket;
+        await moxieApi.createTicketComment({ ticketNumber, comment: description, userEmail, isPrivate: false });
+      }
+      return result;
     }
   },
   {
