@@ -43,7 +43,7 @@ class MoxieServer {
       this.baseUrl = `${this.baseUrl}/api/public`;
     }
 
-    // Client name → ID cache (loaded lazily on first resolveClientId call)
+    // Client name → ID cache (loaded lazily by getClientMap)
     this.clientMapCache = null;
 
     console.error(`Moxie API configured: ${this.baseUrl.replace(this.apiKey, '***')}`);
@@ -108,22 +108,6 @@ class MoxieServer {
   }
 
   // Name Resolution Helpers
-  async resolveClientId(clientName) {
-    // Check full client map first (covers clients that don't appear in search results)
-    const map = await this.getClientMap();
-    if (map[clientName]) return map[clientName];
-
-    // Fall back to search API for partial/fuzzy matches
-    const clients = await this.searchClients(clientName);
-    const list = Array.isArray(clients) ? clients : (clients.clients || []);
-    const client = list.find(c => c.name === clientName);
-    if (!client) {
-      const available = Object.keys(map).join('\n  ');
-      throw new Error(`Client not found: "${clientName}".\n\nAvailable clients:\n  ${available}`);
-    }
-    return client.id;
-  }
-
   async resolveProjectId(projectName) {
     const projects = await this.searchProjects(projectName);
     const list = Array.isArray(projects) ? projects : (projects.projects || []);
@@ -220,6 +204,10 @@ class MoxieServer {
 
   async createTicket(data) {
     return this.makeRequest('/action/tickets/create', 'POST', data);
+  }
+
+  async updateTicket(data) {
+    return this.makeRequest('/action/tickets/update', 'POST', data);
   }
 
   async createTicketComment(data) {
@@ -459,11 +447,11 @@ const TOOLS = [
       required: ['name', 'clientName']
     },
     handler: async (args) => {
-      const { clientName, templateName, ...projectData } = args;
-      const clientId = await moxieApi.resolveClientId(clientName);
+      const { templateName, ...projectData } = args;
+      // Moxie API accepts clientName directly — no ID resolution needed
       let templateId;
       if (templateName) templateId = await moxieApi.resolveInvoiceTemplateId(templateName);
-      return moxieApi.createProject({ ...projectData, clientId, ...(templateId && { templateId }) });
+      return moxieApi.createProject({ ...projectData, ...(templateId && { templateId }) });
     }
   },
 
@@ -497,10 +485,8 @@ const TOOLS = [
       required: ['name', 'clientName', 'projectName']
     },
     handler: async (args) => {
-      const { clientName, projectName, ...taskData } = args;
-      const clientId = await moxieApi.resolveClientId(clientName);
-      const projectId = await moxieApi.resolveProjectId(projectName);
-      return moxieApi.createTask({ ...taskData, clientId, projectId });
+      // Moxie API accepts clientName and projectName directly — no ID resolution needed
+      return moxieApi.createTask(args);
     }
   },
   {
@@ -560,9 +546,8 @@ const TOOLS = [
       required: ['clientName']
     },
     handler: async (args) => {
-      const { clientName, ...invoiceData } = args;
-      const clientId = await moxieApi.resolveClientId(clientName);
-      return moxieApi.createInvoice({ ...invoiceData, clientId });
+      // Moxie API accepts clientName directly — no ID resolution needed
+      return moxieApi.createInvoice(args);
     }
   },
   {
@@ -603,11 +588,8 @@ const TOOLS = [
       required: ['date', 'amount', 'currency', 'paid', 'reimbursable']
     },
     handler: async (args) => {
-      const { clientName, vendor, ...expenseData } = args;
-      if (clientName) {
-        const clientId = await moxieApi.resolveClientId(clientName);
-        expenseData.clientId = clientId;
-      }
+      const { vendor, ...expenseData } = args;
+      // Moxie API accepts clientName directly — no ID resolution needed
       if (vendor) {
         const vendorId = await moxieApi.resolveVendorId(vendor);
         expenseData.vendorId = vendorId;
@@ -713,6 +695,23 @@ const TOOLS = [
     },
     handler: async (args) => await moxieApi.createTicketComment(args)
   },
+  {
+    name: 'moxie_update_ticket',
+    description: 'Update fields on an existing ticket (subject, status, priority, due date, assigned user)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticketNumber: { type: 'number', description: 'Ticket number (numeric, e.g. 1207) — required' },
+        subject: { type: 'string', description: 'Updated subject/title' },
+        status: { type: 'string', description: 'New status (e.g. New, In Progress, Closed)' },
+        priority: { type: 'string', enum: ['Low', 'Medium', 'High', 'Urgent'] },
+        dueDate: { type: 'string', format: 'date', description: 'Due date in YYYY-MM-DD format' },
+        assignedTo: { type: 'string', description: 'User email to assign to' }
+      },
+      required: ['ticketNumber']
+    },
+    handler: async (args) => await moxieApi.updateTicket(args)
+  },
 
   // Opportunities
   {
@@ -733,12 +732,8 @@ const TOOLS = [
       required: ['name']
     },
     handler: async (args) => {
-      const { clientName, ...opportunityData } = args;
-      if (clientName) {
-        const clientId = await moxieApi.resolveClientId(clientName);
-        opportunityData.clientId = clientId;
-      }
-      return moxieApi.createOpportunity(opportunityData);
+      // Moxie API accepts clientName directly — no ID resolution needed
+      return moxieApi.createOpportunity(args);
     }
   },
   {
@@ -792,12 +787,9 @@ const TOOLS = [
       required: ['formName']
     },
     handler: async (args) => {
-      const { formName, clientName, ...formData } = args;
+      const { formName, ...formData } = args;
+      // Moxie API accepts clientName directly — no ID resolution needed
       const formId = await moxieApi.resolveFormId(formName);
-      if (clientName) {
-        const clientId = await moxieApi.resolveClientId(clientName);
-        formData.clientId = clientId;
-      }
       return moxieApi.createFormSubmission({ ...formData, formId });
     }
   },
@@ -845,11 +837,8 @@ const TOOLS = [
       }
     },
     handler: async (args) => {
-      const { clientName, projectName, ...eventData } = args;
-      if (clientName) {
-        const clientId = await moxieApi.resolveClientId(clientName);
-        eventData.clientId = clientId;
-      }
+      const { projectName, ...eventData } = args;
+      // Moxie API accepts clientName directly — no ID resolution needed
       if (projectName) {
         const projectId = await moxieApi.resolveProjectId(projectName);
         eventData.projectId = projectId;
