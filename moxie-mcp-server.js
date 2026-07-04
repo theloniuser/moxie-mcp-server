@@ -521,29 +521,37 @@ const TOOLS = [
       type: 'object',
       properties: {
         clientName: { type: 'string', description: 'Exact match of client name (required)' },
-        dateDue: { type: 'string', format: 'date' },
-        invoiceType: { 
-          type: 'string', 
-          enum: ['STANDARD', 'RECURRING'],
-          default: 'STANDARD'
-        },
-        lineItems: {
+        invoiceNumber: { type: 'string' },
+        templateName: { type: 'string', description: 'Must match an existing invoice template exactly' },
+        dueDate: { type: 'string', format: 'date' },
+        taxRate: { type: 'number' },
+        discountPercent: { type: 'number' },
+        paymentInstructions: { type: 'string' },
+        items: {
           type: 'array',
+          description: 'Required — line items for the invoice',
           items: {
             type: 'object',
             properties: {
               description: { type: 'string' },
               quantity: { type: 'number' },
               rate: { type: 'number' },
-              taxable: { type: 'boolean' }
+              taxable: { type: 'boolean' },
+              projectName: { type: 'string', description: 'Must match an existing project name on the client record exactly' }
             }
           }
         },
-        discountAmount: { type: 'number' },
-        notes: { type: 'string' },
-        customValues: { type: 'object' }
+        sendTo: {
+          type: 'object',
+          description: 'Optional — omit to leave the invoice in DRAFT status',
+          properties: {
+            send: { type: 'boolean' },
+            contacts: { type: 'array', items: { type: 'string' } },
+            emailTemplateName: { type: 'string' }
+          }
+        }
       },
-      required: ['clientName']
+      required: ['clientName', 'items']
     },
     handler: async (args) => {
       // Moxie API accepts clientName directly — no ID resolution needed
