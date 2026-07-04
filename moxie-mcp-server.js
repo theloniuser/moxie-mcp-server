@@ -529,6 +529,7 @@ const TOOLS = [
         paymentInstructions: { type: 'string' },
         items: {
           type: 'array',
+          minItems: 1,
           description: 'Required — line items for the invoice',
           items: {
             type: 'object',
@@ -538,7 +539,8 @@ const TOOLS = [
               rate: { type: 'number' },
               taxable: { type: 'boolean' },
               projectName: { type: 'string', description: 'Must match an existing project name on the client record exactly' }
-            }
+            },
+            required: ['description', 'quantity', 'rate']
           }
         },
         sendTo: {
