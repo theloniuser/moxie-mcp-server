@@ -516,7 +516,7 @@ const TOOLS = [
   },
   {
     name: 'moxie_create_invoice',
-    description: 'Create a new invoice',
+    description: 'Create a new invoice. Always left in DRAFT status — this tool cannot send or email invoices; send manually in the Moxie UI.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -542,22 +542,15 @@ const TOOLS = [
             },
             required: ['description', 'quantity', 'rate']
           }
-        },
-        sendTo: {
-          type: 'object',
-          description: 'Optional — omit to leave the invoice in DRAFT status',
-          properties: {
-            send: { type: 'boolean' },
-            contacts: { type: 'array', items: { type: 'string' } },
-            emailTemplateName: { type: 'string' }
-          }
         }
       },
       required: ['clientName', 'items']
     },
     handler: async (args) => {
       // Moxie API accepts clientName directly — no ID resolution needed
-      return moxieApi.createInvoice(args);
+      // sendTo is intentionally never forwarded: this tool must never trigger Moxie's send-to-client action
+      const { sendTo, ...safeArgs } = args;
+      return moxieApi.createInvoice(safeArgs);
     }
   },
   {
